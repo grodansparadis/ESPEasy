@@ -1,0 +1,40 @@
+.. include:: _controller_substitutions.repl
+
+.. _C020_page:
+
+|C020_typename|
+==================================================
+
+|C020_shortinfo|
+
+Controller details
+------------------
+
+Type: |C020_type|
+
+Name: |C020_name|
+
+Status: |C020_status|
+
+GitHub: |C020_github|_
+
+Maintainer: |C020_maintainer|
+
+Change log
+----------
+
+.. versionchanged:: 2.0
+  ...
+
+  |added|
+  Major overhaul for 2.0 release.
+
+.. versionadded:: 1.0
+  ...
+
+  |added|
+  Initial release version.
+
+Description
+-----------
+VSCP MQTT
