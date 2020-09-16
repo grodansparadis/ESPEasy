@@ -187,3 +187,15 @@
 .. |C018_shortinfo| replace:: `Controller for the LoRaWAN/TTN network supporting RN2384 (434/868 MHz) and RN2903 (915 MHz)`
 .. |C018_maintainer| replace:: `TD-er`
 .. |C018_compileinfo| replace:: `.`
+
+.. |C020_name| replace:: :cyan:`VSCP MQTT`
+.. |C020_type| replace:: :cyan:`Controller`
+.. |C020_typename| replace:: :cyan:`Controller - VSCP MQTT`
+.. |C020_status| replace:: :yellow:`TESTING`
+.. |C020_github| replace:: C020.ino
+.. _C020_github: https://github.com/grodansparadis/ESPEasy/blob/mega/src/_C020.ino
+.. |C020_usedby| replace:: `.`
+.. |C020_shortinfo| replace:: `Controller for VSCP over MQTT`
+.. |C020_maintainer| replace:: `akhe@grodansparadis.com`
+.. |C020_compileinfo| replace:: `.`
+

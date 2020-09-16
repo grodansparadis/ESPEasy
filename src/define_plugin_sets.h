@@ -877,6 +877,7 @@ To create/register a plugin, you have to :
     //#define USES_C015   // Blynk
     #define USES_C017   // Zabbix
     // #define USES_C018 // TTN RN2483
+    #define USES_C020   // VSCP tcp/ip
 #endif
 
 
