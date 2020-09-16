@@ -1,0 +1,18 @@
+{
+    "name": "VscpTcpClient",
+    "keywords": "ethernet, tcpip, automation, vscp, m2m, iot",
+    "description": "VSCP is a framework for IoT/m2m hardware that can communicate over many different mediums and protocols. The VscpTcpClient library can be used to communicate with a VSCP remote host in an easy and intuitive way. The library supports all Arduino Ethernet Client compatible hardware.",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/grodansparadis/arduino-vscptcpclient.git"
+    },
+    "version": "1.1.1",
+    "exclude": "tests",
+    "examples": "examples/*/*.ino",
+    "frameworks": "arduino",
+    "platforms": [
+        "atmelavr",
+        "espressif8266",
+        "espressif32"
+    ]
+}
