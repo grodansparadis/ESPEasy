@@ -9,21 +9,93 @@
 #define CPLUGIN_ID_020         20
 #define CPLUGIN_NAME_020       "VSCP MQTT"
 
+#define C020_HEARTBEAT_LABEL   "heartbeat"
+#define C020_ZONE_LABEL        "zone"
+#define C020_SUBZONE0_LABEL    "subzone0"
+#define C020_SUBZONE1_LABEL    "subzone1"
+#define C020_SUBZONE2_LABEL    "subzone2"
+#define C020_SUBZONE3_LABEL    "subzone3"
+#define C020_SUBZONE4_LABEL    "subzone4"
+#define C020_SUBZONE5_LABEL    "subzone5"
+#define C020_SUBZONE9_LABEL    "subzone9"
+#define C020_SUBZONE10_LABEL   "subzone10"
+#define C020_SUBZONE12_LABEL   "subzone12"
+#define C020_SUBZONE13_LABEL   "subzone13"
+#define C020_SUBZONE14_LABEL   "subzone14"
+#define C020_SUBZONE15_LABEL   "subzone15"
+
 #include "src/Commands/InternalCommands.h"
 #include <ArduinoJson.h>
 #include <vscp.h>
 
 String CPlugin_020_prefix;                    // MQTT publish prefix
 String CPlugin_020_guid;                      // VSCP guid
+byte CPlugin_020_stream_idx;                  // Current stream index
+String CPlugin_020_stream;                    // Stream data
 bool CPlugin_020_mqtt_retainFlag = false;     
 unsigned long CPlugin_020_last_heartbeat = 0; // Timestamp last VSCP heartbeat
-byte CPlugin_020_stream_index = 0;             // Used for string/data streams
+byte CPlugin_020_stream_index = 0;            // Used for string/data streams
 
 // Forward declarations
 bool CPlugin_020_send_vscp_event(struct EventStruct *event, uint16_t vscp_class, uint16_t vscp_type, DynamicJsonDocument &vscp_event );
 void CPlugin_020_set_single_val( DynamicJsonDocument &vscp_event, struct EventStruct *event, byte nVar, byte offset);
 bool CPlugin_020_SendStringAsStream(struct EventStruct *event,String &str);
 String CPlugin_020_formatUserVar(struct EventStruct *event, byte rel_index);
+
+struct C020_ConfigStruct
+{
+  C020_ConfigStruct() {
+    reset();
+  }
+
+  void validate() {
+    // ZERO_TERMINATE(DeviceEUI);
+    // ZERO_TERMINATE(DeviceAddr);
+    // ZERO_TERMINATE(NetworkSessionKey);
+    // ZERO_TERMINATE(AppSessionKey);
+
+    // if ((baudrate < 2400) || (baudrate > 115200)) {
+    //   reset();
+    // }
+  }
+
+  void reset() {
+    // ZERO_FILL(DeviceEUI);
+    // ZERO_FILL(DeviceAddr);
+    // ZERO_FILL(NetworkSessionKey);
+    // ZERO_FILL(AppSessionKey);
+    bHeartbeat = true;
+    module_zone   = 0;
+    module_subzone0 = 0;
+    module_subzone1 = 1;
+    module_subzone2 = 2;
+    module_subzone3 = 3;
+    module_subzone4 = 4;
+    module_subzone5 = 5;
+    module_subzone9 = 9;
+    module_subzone10 = 10;
+    module_subzone12 = 12;
+    module_subzone13 = 13;
+    module_subzone14 = 14;
+    module_subzone15 = 15;
+  }
+
+  bool bHeartbeat;
+  byte module_zone;
+  byte module_subzone0;
+  byte module_subzone1;
+  byte module_subzone2;
+  byte module_subzone3;
+  byte module_subzone4;
+  byte module_subzone5;
+  byte module_subzone9;
+  byte module_subzone10;
+  byte module_subzone12;
+  byte module_subzone13;
+  byte module_subzone14;
+  byte module_subzone15;
+};
+
 
 bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& string)
 {
@@ -72,97 +144,363 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
 
       // Publish
       event->String1 =  F("vscp/");
-      event->String1 += F("FF:FF:FF:FF:FF:FF:FF:FE:%mac%:00:00");
+      event->String1 += CPlugin_020_guid;
       event->String1 += F("/miso");
 
       // Subscribe
       event->String2 =  F("vscp/");
-      event->String2 += F("FF:FF:FF:FF:FF:FF:FF:FE:%mac%:00:00");
+      event->String2 += CPlugin_020_guid;
       event->String2 += F("/mosi");
+      break;
+    }
+
+    case CPlugin::Function::CPLUGIN_WEBFORM_LOAD:
+    {
+      bool bHeartbeat;
+      byte module_zone;
+      byte module_subzone0;
+      byte module_subzone1;
+      byte module_subzone2;
+      byte module_subzone3;
+      byte module_subzone4;
+      byte module_subzone5;
+      byte module_subzone9;
+      byte module_subzone10;
+      byte module_subzone11;
+      byte module_subzone12;
+      byte module_subzone13;
+      byte module_subzone14;
+      byte module_subzone15;
+
+      {
+        // Keep this object in a small scope so we can destruct it as soon as possible again.
+        std::shared_ptr<C020_ConfigStruct> customConfig(new C020_ConfigStruct);
+
+        if (!customConfig) {
+          break;
+        }
+        LoadCustomControllerSettings(event->ControllerIndex, (byte *)customConfig.get(), sizeof(C020_ConfigStruct));
+        customConfig->validate();
+        bHeartbeat = customConfig->bHeartbeat;
+        module_zone = customConfig->module_zone;
+        module_subzone0 = customConfig->module_subzone0;
+        module_subzone1 = customConfig->module_subzone1;
+        module_subzone2 = customConfig->module_subzone2;
+        module_subzone3 = customConfig->module_subzone3;
+        module_subzone4 = customConfig->module_subzone4;
+        module_subzone5 = customConfig->module_subzone5;
+        module_subzone9 = customConfig->module_subzone9;
+        module_subzone10 = customConfig->module_subzone10;
+        module_subzone12 = customConfig->module_subzone12;
+        module_subzone13 = customConfig->module_subzone13;
+        module_subzone14 = customConfig->module_subzone14;
+        module_subzone15 = customConfig->module_subzone15;
+      }
+
+      addTableSeparator(F("VSCP specific configuration"), 2, 3);
+      {
+        addFormCheckBox(F("Enable heartbeat event"), F(C020_HEARTBEAT_LABEL), true, false);
+
+        addFormNumericBox(F("Module zone"), F(C020_ZONE_LABEL), module_zone, 0, 255);
+        //addUnit(F("---"));
+        //addFormNote(F("The zone is common for all operations"));
+
+        addFormNumericBox(F("subzone GPIO-0 (D3) ⚠"), F(C020_SUBZONE0_LABEL), module_subzone0, 0, 254);
+        //addUnit(F("---"));
+        //addFormNote(F("255, for all subzones is not allowed."));
+
+        addFormNumericBox(F("subzone GPIO-1 (D10) TX0"), F(C020_SUBZONE1_LABEL), module_subzone1, 0, 254);
+        //addUnit(F("---"));
+        //addFormNote(F("255, for all subzones is not allowed."));
+
+        addFormNumericBox(F("subzone GPIO-2 (D4) ⚠"), F(C020_SUBZONE2_LABEL), module_subzone2, 0, 254);
+        //addUnit(F("---"));
+        //addFormNote(F("255, for all subzones is not allowed."));
+
+        addFormNumericBox(F("subzone GPIO-3 (D9) RX0"), F(C020_SUBZONE3_LABEL), module_subzone3, 0, 254);
+        //addUnit(F("---"));
+        //addFormNote(F("255, for all subzones is not allowed."));
+
+        addFormNumericBox(F("subzone GPIO-4 (D2)"), F(C020_SUBZONE4_LABEL), module_subzone4, 0, 254);
+        //addUnit(F("---"));
+        //addFormNote(F("255, for all subzones is not allowed."));
+
+        addFormNumericBox(F("subzone GPIO-5 (D1)"), F(C020_SUBZONE5_LABEL), module_subzone5, 0, 254);
+        //addUnit(F("---"));
+        //addFormNote(F("255, for all subzones is not allowed."));
+
+        addFormNumericBox(F("subzone GPIO-9 (D11) ⚠"), F(C020_SUBZONE9_LABEL), module_subzone9, 0, 254);
+        //addUnit(F("---"));
+        //addFormNote(F("255, for all subzones is not allowed."));
+
+        addFormNumericBox(F("subzone GPIO-10 (D12) ⚠"), F(C020_SUBZONE10_LABEL), module_subzone10, 0, 254);
+        //addUnit(F("---"));
+        //addFormNote(F("255, for all subzones is not allowed."));
+
+        addFormNumericBox(F("subzone GPIO-12 (D6)"), F(C020_SUBZONE12_LABEL), module_subzone12, 0, 254);
+        //addUnit(F("---"));
+        //addFormNote(F("255, for all subzones is not allowed."));
+
+        addFormNumericBox(F("subzone GPIO-13 (D7)"), F(C020_SUBZONE13_LABEL), module_subzone13, 0, 254);
+        //addUnit(F("---"));
+        //addFormNote(F("255, for all subzones is not allowed."));
+
+        addFormNumericBox(F("subzone GPIO-14 (D5)"), F(C020_SUBZONE14_LABEL), module_subzone14, 0, 254);
+        //addUnit(F("---"));
+        //addFormNote(F("255, for all subzones is not allowed."));
+
+        addFormNumericBox(F("subzone GPIO-15 (D8)"), F(C020_SUBZONE15_LABEL), module_subzone15, 0, 254);
+        //addUnit(F("---"));
+        //addFormNote(F("255, for all subzones is not allowed."));
+      }
+      break;
+    }
+
+    case CPlugin::Function::CPLUGIN_WEBFORM_SAVE:
+    {
+      std::shared_ptr<C020_ConfigStruct> customConfig(new C020_ConfigStruct);
+
+      if (customConfig) {
+        customConfig->reset();
+        //customConfig->bheartbeat = web_server.arg(F("bheartbeat"));
+        customConfig->bHeartbeat = isFormItemChecked(F(C020_HEARTBEAT_LABEL));
+        customConfig->module_zone = getFormItemInt(F(C020_ZONE_LABEL), customConfig->module_zone);
+        customConfig->module_subzone0 = getFormItemInt(F(C020_SUBZONE0_LABEL), customConfig->module_subzone0);
+        customConfig->module_subzone1 = getFormItemInt(F(C020_SUBZONE1_LABEL), customConfig->module_subzone1);
+        customConfig->module_subzone2 = getFormItemInt(F(C020_SUBZONE2_LABEL), customConfig->module_subzone2);
+        customConfig->module_subzone3 = getFormItemInt(F(C020_SUBZONE3_LABEL), customConfig->module_subzone3);
+        customConfig->module_subzone4 = getFormItemInt(F(C020_SUBZONE4_LABEL), customConfig->module_subzone4);
+        customConfig->module_subzone5 = getFormItemInt(F(C020_SUBZONE5_LABEL), customConfig->module_subzone5);
+        customConfig->module_subzone9 = getFormItemInt(F(C020_SUBZONE9_LABEL), customConfig->module_subzone9);
+        customConfig->module_subzone10 = getFormItemInt(F(C020_SUBZONE10_LABEL), customConfig->module_subzone10);
+        customConfig->module_subzone12 = getFormItemInt(F(C020_SUBZONE12_LABEL), customConfig->module_subzone12);
+        customConfig->module_subzone13 = getFormItemInt(F(C020_SUBZONE13_LABEL), customConfig->module_subzone13);
+        customConfig->module_subzone14 = getFormItemInt(F(C020_SUBZONE14_LABEL), customConfig->module_subzone14);
+        customConfig->module_subzone15 = getFormItemInt(F(C020_SUBZONE15_LABEL), customConfig->module_subzone15);        
+      }
       break;
     }
 
     case CPlugin::Function::CPLUGIN_PROTOCOL_RECV:
     {
-      // Find first enabled controller index with this protocol
+      // zone = ControllerID
+      // subzone = gpio
+
+      // Find first enabled controller index with this protocol  
       controllerIndex_t ControllerID = findFirstEnabledControllerWithId(CPLUGIN_ID_020);
+      
+      Serial.print("Incoming VSCP event ");
+      Serial.println(ControllerID);
 
       if (validControllerIndex(ControllerID)) {
-        String pubname;
-        DynamicJsonDocument root(512);
-        deserializeJson(root, event->String2.c_str());
 
-        if (!root.isNull())
+        DynamicJsonDocument vscp_event(512);
+        deserializeJson(vscp_event, event->String2.c_str());
+
+        if (!vscp_event.isNull())
         {
-          unsigned int idx = root[F("idx")];
-          float nvalue     = root[F("nvalue")];
-          long  nvaluealt  = root[F("nvalue")];
 
-          // const char* name = root["name"]; // Not used
-          // const char* svalue = root["svalue"]; // Not used
-          const char *svalue1 = root[F("svalue1")];
+          uint16_t vscp_class = vscp_event[F("vscpClass")];
+          uint16_t vscp_type = vscp_event[F("vscpType")];
+          JsonArray vscp_data = vscp_event[F("vscpData")];
 
-          // const char* svalue2 = root["svalue2"]; // Not used
-          // const char* svalue3 = root["svalue3"]; // Not used
-          const char *switchtype = root[F("switchType")]; // Expect "On/Off" or "dimmer"
-
-          if (nvalue == 0) {
-            nvalue = nvaluealt;
-          }
-
-          if ((int)switchtype == 0) {
-            switchtype = "?";
-          }
+          // We handle 
+          // VSCP_CLASS1.CONTROL/VSCP_TYPE_CONTROL_TURNON
+          // VSCP_CLASS1.CONTROL/VSCP_TYPE_CONTROL_TURNOFF
+          // VSCP_CLASS1.CONTROL/VSCP_TYPE_CONTROL_DIM_LAMPS
+          // Set to input???
+          // Pulse
+          // PWM
+          // Servo
+          // Tone
+          // Stream -> ESPEasy events 
+          // Zone is id for C020 controller
+          // Subzone is gpio 
+          // https://www.letscontrolit.com/wiki/index.php/GPIO
+          // https://espeasy.readthedocs.io/en/latest/Reference/Command.html
 
           for (taskIndex_t x = 0; x < TASKS_MAX; x++) {
             // We need the index of the controller we are: 0...CONTROLLER_MAX
-            if (Settings.TaskDeviceEnabled[x] && (Settings.TaskDeviceID[ControllerID][x] == idx)) // get idx for our controller index
+            if (Settings.TaskDeviceEnabled[x] && (Settings.TaskDeviceID[ControllerID][x] == vscp_data[1])) // get idx for our controller index
             {
               String action = "";
 
+              Serial.print("x  ");
+              Serial.println(x);
+              Serial.print("Settings.TaskDeviceNumber[x]");
+              Serial.println(Settings.TaskDeviceNumber[x]);
+
               switch (Settings.TaskDeviceNumber[x]) {
-                case 1: // temp solution, if input switch, update state
-                {
-                  action  = F("inputSwitchState,");
-                  action += x;
-                  action += ',';
-                  action += nvalue;
-                  break;
-                }
-                case 29: // temp solution, if plugin 029, set gpio
-                {
-                  action = "";
-                  int baseVar = x * VARS_PER_TASK;
 
-                  if (strcasecmp_P(switchtype, PSTR("dimmer")) == 0)
-                  {
-                    int pwmValue = UserVar[baseVar];
-                    action  = F("pwm,");
-                    action += Settings.TaskDevicePin1[x];
-                    action += ',';
-
-                    switch ((int)nvalue)
-                    {
-                      case 0:  // Off
-                        pwmValue         = 0;
-                        UserVar[baseVar] = pwmValue;
+                // https://espeasy.readthedocs.io/en/latest/Plugin/P001.html
+                case 1: 
+                {
+                  if ( VSCP_CLASS1_CONTROL == vscp_class ) {
+                    switch(vscp_type) {
+                      
+                      case VSCP_TYPE_CONTROL_TURNON:
+                        Serial.println("VSCP_TYPE_CONTROL_TURNON");
+                        if ( 3 == vscp_data.size() ) {
+                          // GPIO,<gpio>,<state>
+                          action  = F("gpio,");
+                          action += (byte)vscp_data[2];  // GPIO
+                          action += ',';
+                          action += 1;
+                        }
+                        else {
+                          String log = F("VSCP : Data count is wrong!");
+                          addLog(LOG_LEVEL_ERROR, log);
+                        }
                         break;
-                      case 1: // On
-                      case 2: // Update dimmer value
-                        pwmValue         = 10 * atol(svalue1);
-                        UserVar[baseVar] = pwmValue;
+
+                      case VSCP_TYPE_CONTROL_TURNOFF:
+                        // GPIO,<gpio>,<state>
+                        action  = F("gpio,");
+                        action += x;  // GPIO
+                        action += ',';
+                        action += 0;
+                        break;
+
+                      case VSCP_TYPE_CONTROL_TOGGLE_STATE:
+                        // GPIOtoggle,<gpio>,<state>
+                        action  = F("gpiotoggle,");
+                        action += x;  // GPIO
+                        break;
+
+                      // milliseconds/seconds/minutes
+                      case VSCP_TYPE_CONTROL_TIMED_PULSE_ON:
+                        {
+                          long int duration;
+                          byte *p = (byte *)&duration;
+                          p[0] = vscp_event[F("vscpData")][7];
+                          p[1] = vscp_event[F("vscpData")][6];
+                          p[2] = vscp_event[F("vscpData")][5];
+                          p[3] = vscp_event[F("vscpData")][4];
+                          
+                          switch( (byte)vscp_event[F("vscpData")][3] & 0x07) {
+                            
+                            case 0: // microseconds
+                              duration = duration/1000;
+                              action  = F("pulse,");
+                              break;
+
+                            case 1: // milliseconds
+                              if (duration <= 1000 ) {
+                                action  = F("pulse,");
+                              }
+                              else if (duration <= 15000 ) {
+                                action  = F("longpulsems,");
+                              }
+                              else {
+                                duration /= 1000; // Max 999s
+                                action  = F("longpulse,");
+                              }
+                              break;
+
+                            case 2: // seconds
+                              action  = F("longpulse,");
+                              break;  
+                          } // timing
+                          action += x;  // GPIO
+                          action += ",1,";
+                          action += duration;
+                        }
+                        break;
+
+                      case VSCP_TYPE_CONTROL_TIMED_PULSE_OFF: 
+                        {
+                          long int duration;
+                          byte *p = (byte *)&duration;
+                          p[0] = vscp_event[F("vscpData")][7];
+                          p[1] = vscp_event[F("vscpData")][6];
+                          p[2] = vscp_event[F("vscpData")][5];
+                          p[3] = vscp_event[F("vscpData")][4];
+                        
+                          switch((byte)vscp_event[F("vscpData")][3] & 0x07) {
+                          
+                            case 0: // microseconds
+                              duration = duration/1000;
+                              action  = F("pulse,");
+                              break;
+
+                            case 1: // milliseconds
+                              if (duration <= 1000 ) {
+                                action  = F("pulse,");
+                              }
+                              else if (duration <= 15000 ) {
+                                action  = F("longpulsems,");
+                              }
+                              else {
+                                duration /= 1000; // Max 999s
+                                action  = F("longpulse,");
+                              }
+                              break;
+
+                            case 2: // seconds
+                              action  = F("longpulse,");
+                              break;  
+                          } // timing
+                          action += x;  // GPIO
+                          action += ",0,";
+                          action += duration;
+                        }
+                        break;
+
+                      case VSCP_TYPE_CONTROL_PWM:
+                        {
+                          // PWM,<GPIO>,<state>
+                          // PWM,<GPIO>,<state>,<duration> 
+
+                          uint16_t time_on;
+                          uint16_t time_off;
+                          byte *p = (byte *)&time_on;
+                          p[0] = vscp_event[F("vscpData")][5];
+                          p[1] = vscp_event[F("vscpData")][4];
+                          p = (byte *)&time_off;
+                          p[0] = vscp_event[F("vscpData")][7];
+                          p[1] = vscp_event[F("vscpData")][6];
+
+                          action = "pwm,";
+                          action += x;  // GPIO
+                          action += ",";
+                          if (0 == time_on) {
+                            action += 0;    // leave off if no on time  
+                          }
+                          else if (0 == time_off) {
+                            action += 1023; // leave on if no off time
+                          }
+                          else {
+                            // Calculate duty cycle
+                            action += ((float)time_on/(time_on + time_off)) * 1023;
+                          }
+                        }
+                        break;
+
+                      default:
+                        // Ask for switch state TODO remove/change
+                        action  = F("inputSwitchState,");
+                        action += x;  // GPIO
+                        action += ',';
+                        action += 1;
                         break;
                     }
-                    action += pwmValue;
-                  } else {
-                    UserVar[baseVar] = nvalue;
-                    action           = F("gpio,");
-                    action          += Settings.TaskDevicePin1[x];
-                    action          += ',';
-                    action          += nvalue;
                   }
-                  break;
+                  // Servo == position
+                  // signed 16-bit integer -180 - +180
+                  // float
+                  else if ( (VSCP_CLASS1_SETVALUEZONE == vscp_class) &&
+                            (VSCP_TYPE_MEASUREMENT_ANGLE == vscp_type)) {                    
+                      action  = F("servo,");
+                      action += 0;  // sensorindex
+                      action += ',';
+                      action += x;  // GPIO
+                      action += ',';
+                      action += 1; // TODO
+                  }
+
+                  
                 }
+                
 #if defined(USES_P088) || defined(USES_P115)
                 case 88: // Send heatpump IR (P088) if IDX matches
                 case 115: // Send heatpump IR (P115) if IDX matches
@@ -190,7 +528,7 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
             }
           }
           LoadTaskSettings(event->TaskIndex);
-        }
+        } // !null
       }
       break;
     }
@@ -200,7 +538,6 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
       if (event->idx != 0)
       {
         String pubname;
-        byte *p;
         uint16_t vscp_class;
         uint16_t vscp_type;
         DynamicJsonDocument vscp_event(512);
@@ -614,12 +951,14 @@ bool CPlugin_020_send_vscp_event(struct EventStruct *event, uint16_t vscp_class,
   vscp_event[F("vscpClass")] = vscp_class;
   vscp_event[F("vscpType")] = vscp_type;
 
-  String pubname = CPlugin_020_prefix + "/" + 
-                          F("FF:FF:FF:FF:FF:FF:FF:FE:%mac%:00:00") + "/" + 
+  String topic = CPlugin_020_prefix + "/" + 
+                          CPlugin_020_guid + "/" + 
                           vscp_class + "/" + vscp_type;
-  parseControllerVariables(pubname, event, false);
+  topic = CPlugin_020_prefix + "/" + 
+            vscp_class + "/" + vscp_type;                    
+  parseControllerVariables(topic, event, false);
 
-  return MQTTpublish(event->ControllerIndex, pubname.c_str(), json.c_str(), CPlugin_020_mqtt_retainFlag);
+  return MQTTpublish(event->ControllerIndex, topic.c_str(), json.c_str(), CPlugin_020_mqtt_retainFlag);
 }
 
 // Send a string as a stream of events
