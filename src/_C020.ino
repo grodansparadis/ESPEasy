@@ -9,39 +9,34 @@
 #define CPLUGIN_ID_020         20
 #define CPLUGIN_NAME_020       "VSCP MQTT"
 
-#define C020_HEARTBEAT_LABEL   "heartbeat"
-#define C020_ZONE_LABEL        "zone"
-#define C020_SUBZONE0_LABEL    "subzone0"
-#define C020_SUBZONE1_LABEL    "subzone1"
-#define C020_SUBZONE2_LABEL    "subzone2"
-#define C020_SUBZONE3_LABEL    "subzone3"
-#define C020_SUBZONE4_LABEL    "subzone4"
-#define C020_SUBZONE5_LABEL    "subzone5"
-#define C020_SUBZONE9_LABEL    "subzone9"
-#define C020_SUBZONE10_LABEL   "subzone10"
-#define C020_SUBZONE12_LABEL   "subzone12"
-#define C020_SUBZONE13_LABEL   "subzone13"
-#define C020_SUBZONE14_LABEL   "subzone14"
-#define C020_SUBZONE15_LABEL   "subzone15"
+#define C020_HEARTBEAT_LABEL          "lblhb"
+#define C020_VCC_LABEL                "lblvcc"
+#define C020_RSSI_LABEL               "lblrssi"
+#define C020_ZONE_LABEL               "lblmainzone"
+#define C020_ONOFF_SUBZONE_LABEL      "lblonoffsz"
+#define C020_HEARTBEAT_SUBZONE_LABEL  "lblhbsz"
+#define C020_VCC_SUBZONE_LABEL        "lblvccsz"
+#define C020_RSSI_SUBZONE_LABEL       "lblrssisz"
+#define C020_SUBZONE_COUNT            16
+
+// Flags for received events and subzone coding
+#define C020_SUBZONE_EVENT_OPERATION_ONOFF     1
+#define C020_SUBZONE_EVENT_OPERATION_PULSE     2
+#define C020_SUBZONE_EVENT_OPERATION_PWM       3
+#define C020_SUBZONE_EVENT_OPERATION_SERVO     4
+#define C020_SUBZONE_EVENT_OPERATION_MONITOR   5
+#define C020_SUBZONE_EVENT_OPERATION_TONE      6
+#define C020_SUBZONE_EVENT_OPERATION_ENABLE    7
 
 #include "src/Commands/InternalCommands.h"
 #include <ArduinoJson.h>
 #include <vscp.h>
 
-String CPlugin_020_prefix;                    // MQTT publish prefix
-String CPlugin_020_guid;                      // VSCP guid
-byte CPlugin_020_stream_idx;                  // Current stream index
-String CPlugin_020_stream;                    // Stream data
-bool CPlugin_020_mqtt_retainFlag = false;     
-unsigned long CPlugin_020_last_heartbeat = 0; // Timestamp last VSCP heartbeat
-byte CPlugin_020_stream_index = 0;            // Used for string/data streams
-
-// Forward declarations
-bool CPlugin_020_send_vscp_event(struct EventStruct *event, uint16_t vscp_class, uint16_t vscp_type, DynamicJsonDocument &vscp_event );
-void CPlugin_020_set_single_val( DynamicJsonDocument &vscp_event, struct EventStruct *event, byte nVar, byte offset);
-bool CPlugin_020_SendStringAsStream(struct EventStruct *event,String &str);
-String CPlugin_020_formatUserVar(struct EventStruct *event, byte rel_index);
-
+struct C020_SubzoneStruct {
+  byte gpio;
+  byte subzone;
+  int op;
+};
 struct C020_ConfigStruct
 {
   C020_ConfigStruct() {
@@ -54,47 +49,65 @@ struct C020_ConfigStruct
     // ZERO_TERMINATE(NetworkSessionKey);
     // ZERO_TERMINATE(AppSessionKey);
 
-    // if ((baudrate < 2400) || (baudrate > 115200)) {
-    //   reset();
-    // }
+    if (module_zone > 255) {
+       reset();
+    }
+
+    for ( int i=0;i<C020_SUBZONE_COUNT;i++) {
+      if (module_subzone[i].subzone > 254) {
+         reset();
+      }
+    }
+    
   }
 
   void reset() {
     // ZERO_FILL(DeviceEUI);
-    // ZERO_FILL(DeviceAddr);
-    // ZERO_FILL(NetworkSessionKey);
-    // ZERO_FILL(AppSessionKey);
     bHeartbeat = true;
+  #if FEATURE_ADC_VCC  
+    bVCC = false;
+  #endif  
+    bRSSI = false;
     module_zone   = 0;
-    module_subzone0 = 0;
-    module_subzone1 = 1;
-    module_subzone2 = 2;
-    module_subzone3 = 3;
-    module_subzone4 = 4;
-    module_subzone5 = 5;
-    module_subzone9 = 9;
-    module_subzone10 = 10;
-    module_subzone12 = 12;
-    module_subzone13 = 13;
-    module_subzone14 = 14;
-    module_subzone15 = 15;
+    subzone_onoff = 0;
+    subzone_heartbeat = 0;
+    subzone_vcc = 0;
+    for ( int i=0;i<C020_SUBZONE_COUNT;i++) {
+      module_subzone[i].gpio = i;
+      module_subzone[i].subzone = 0;
+      module_subzone[i].op = 0;
+    }
   }
 
   bool bHeartbeat;
+  #if FEATURE_ADC_VCC 
+  bool bVCC;
+  #endif
+  bool bRSSI;
   byte module_zone;
-  byte module_subzone0;
-  byte module_subzone1;
-  byte module_subzone2;
-  byte module_subzone3;
-  byte module_subzone4;
-  byte module_subzone5;
-  byte module_subzone9;
-  byte module_subzone10;
-  byte module_subzone12;
-  byte module_subzone13;
-  byte module_subzone14;
-  byte module_subzone15;
+  byte subzone_onoff;
+  byte subzone_heartbeat;
+  byte subzone_vcc;
+  struct C020_SubzoneStruct module_subzone[C020_SUBZONE_COUNT];  
 };
+
+String CPlugin_020_prefix;                    // MQTT publish prefix
+String CPlugin_020_guid;                      // VSCP guid
+byte CPlugin_020_stream_idx;                  // Current stream index
+String CPlugin_020_stream;                    // Stream data
+bool CPlugin_020_mqtt_retainFlag = false;     
+unsigned long CPlugin_020_last_heartbeat = 0; // Timestamp last VSCP heartbeat event
+#if FEATURE_ADC_VCC 
+unsigned long CPlugin_020_last_vcc = 0;       // Timestamp last VSCP VCC event
+#endif
+unsigned long CPlugin_020_last_rssi = 0;      // Timestamp last VSCP RSSI event
+byte CPlugin_020_stream_index = 0;            // Used for string/data streams
+
+// Forward declarations
+bool CPlugin_020_send_vscp_event(struct EventStruct *event, uint16_t vscp_class, uint16_t vscp_type, DynamicJsonDocument &vscp_event );
+void CPlugin_020_set_single_val( DynamicJsonDocument &vscp_event, struct EventStruct *event, byte nVar, byte offset);
+bool CPlugin_020_SendStringAsStream(struct EventStruct *event,String &str);
+String CPlugin_020_formatUserVar(struct EventStruct *event, byte rel_index);
 
 
 bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& string)
@@ -113,7 +126,12 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
       Protocol[protocolCount].usesExtCreds = true;
       Protocol[protocolCount].defaultPort  = 1883;
       Protocol[protocolCount].usesID       = true;
+
       CPlugin_020_last_heartbeat = 0;
+  #if FEATURE_ADC_VCC     
+      CPlugin_020_last_vcc = 0;
+  #endif    
+      CPlugin_020_last_rssi = 0;
       break;
     }
 
@@ -125,10 +143,26 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
 
     case CPlugin::Function::CPLUGIN_INIT:
     {
+      std::shared_ptr<C020_ConfigStruct> customConfig(new C020_ConfigStruct);
+
+      if (!customConfig) {
+        return false;
+      }
+
+      LoadCustomControllerSettings(event->ControllerIndex, (byte *)customConfig.get(), sizeof(C020_ConfigStruct));
+      customConfig->validate();
+
       success = init_mqtt_delay_queue(event->ControllerIndex, CPlugin_020_prefix, CPlugin_020_mqtt_retainFlag);
       CPlugin_020_guid = F("FF:FF:FF:FF:FF:FF:FF:FE:%mac%:00:00");
       parseControllerVariables(CPlugin_020_guid, event, false);
       CPlugin_020_last_heartbeat = 0;
+  #if FEATURE_ADC_VCC     
+      CPlugin_020_last_vcc = 0;
+  #endif    
+      CPlugin_020_last_rssi = 0;
+      // for (int i=0; i<C020_SUBZONE_COUNT;i++) {
+      //   CPlugin_020_module_subzone[i].subzone = 0;
+      // }
       break;
     }
 
@@ -157,20 +191,17 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
     case CPlugin::Function::CPLUGIN_WEBFORM_LOAD:
     {
       bool bHeartbeat;
+    #if FEATURE_ADC_VCC  
+      bool bVCC;
+    #endif  
+      bool bRSSI;
       byte module_zone;
-      byte module_subzone0;
-      byte module_subzone1;
-      byte module_subzone2;
-      byte module_subzone3;
-      byte module_subzone4;
-      byte module_subzone5;
-      byte module_subzone9;
-      byte module_subzone10;
-      byte module_subzone11;
-      byte module_subzone12;
-      byte module_subzone13;
-      byte module_subzone14;
-      byte module_subzone15;
+      byte subzone_onoff;
+      byte subzone_heartbeat;
+  #if FEATURE_ADC_VCC     
+      byte subzone_vcc;
+  #endif    
+      struct C020_SubzoneStruct module_subzone[C020_SUBZONE_COUNT];
 
       {
         // Keep this object in a small scope so we can destruct it as soon as possible again.
@@ -179,79 +210,139 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
         if (!customConfig) {
           break;
         }
+        
         LoadCustomControllerSettings(event->ControllerIndex, (byte *)customConfig.get(), sizeof(C020_ConfigStruct));
         customConfig->validate();
         bHeartbeat = customConfig->bHeartbeat;
+  #if FEATURE_ADC_VCC       
+        bVCC = customConfig->bVCC;
+  #endif      
+        bRSSI = customConfig->bRSSI;
         module_zone = customConfig->module_zone;
-        module_subzone0 = customConfig->module_subzone0;
-        module_subzone1 = customConfig->module_subzone1;
-        module_subzone2 = customConfig->module_subzone2;
-        module_subzone3 = customConfig->module_subzone3;
-        module_subzone4 = customConfig->module_subzone4;
-        module_subzone5 = customConfig->module_subzone5;
-        module_subzone9 = customConfig->module_subzone9;
-        module_subzone10 = customConfig->module_subzone10;
-        module_subzone12 = customConfig->module_subzone12;
-        module_subzone13 = customConfig->module_subzone13;
-        module_subzone14 = customConfig->module_subzone14;
-        module_subzone15 = customConfig->module_subzone15;
+        subzone_onoff = customConfig->subzone_onoff;
+        subzone_heartbeat = customConfig->subzone_heartbeat;
+  #if FEATURE_ADC_VCC       
+        subzone_vcc = customConfig->subzone_vcc;
+  #endif      
+        for ( int i=0; i<C020_SUBZONE_COUNT;i++) {
+          module_subzone[i].gpio = customConfig->module_subzone[i].gpio;
+          module_subzone[i].subzone = customConfig->module_subzone[i].subzone;
+          module_subzone[i].op = customConfig->module_subzone[i].op;
+        }
       }
 
-      addTableSeparator(F("VSCP specific configuration"), 2, 3);
+      addTableSeparator(F("VSCP module configuration"), 2, 3);
       {
-        addFormCheckBox(F("Enable heartbeat event"), F(C020_HEARTBEAT_LABEL), true, false);
+        addFormCheckBox(F("Enable heartbeat event"), F(C020_HEARTBEAT_LABEL), bHeartbeat, false);
+  #if FEATURE_ADC_VCC 
+        addFormCheckBox(F("Enable VCC event"), F(C020_VCC_LABEL), bVCC, false);
+  #endif      
+
+        addFormCheckBox(F("Enable RSSI event"), F(C020_RSSI_LABEL), bRSSI, false);
 
         addFormNumericBox(F("Module zone"), F(C020_ZONE_LABEL), module_zone, 0, 255);
         //addUnit(F("---"));
-        //addFormNote(F("The zone is common for all operations"));
+        addFormNote(F("Set to '255' for don't care on receive"));
 
-        addFormNumericBox(F("subzone GPIO-0 (D3) ⚠"), F(C020_SUBZONE0_LABEL), module_subzone0, 0, 254);
+        addFormNumericBox(F("On/Off/Monitor Subzone"), F(C020_ONOFF_SUBZONE_LABEL), subzone_onoff, 0, 255);
+        addFormNumericBox(F("Heartbeat Subzone"), F(C020_HEARTBEAT_SUBZONE_LABEL), subzone_heartbeat, 0, 255);
+      #if FEATURE_ADC_VCC   
+        addFormNumericBox(F("VCC Subzone"), F(C020_VCC_SUBZONE_LABEL), subzone_vcc, 0, 255);
+      #endif  
+        //addFormSeparator(2);
+
+        for ( int i=0; i<16; i++) {
+          char lblbuf[50];         
+
+          sprintf(lblbuf,(char *)F("VSCP incoming event handling for gpio%i"),i);
+          addTableSeparator(lblbuf, 2, 3);
+
+          sprintf(lblbuf,(char *)F("lblsz%i"),i);
+          addFormNumericBox(F("subzone"), lblbuf, module_subzone[0].subzone, 0, 255);
+          //addUnit(F("---"));
+          //addFormNote(F("255, for all subzones is not allowed."));
+
+          {
+            String options[7] = { F("disabled"),F("on/off/toggle"),F("monitor"),F("pulse"),F("pwm"),F("servo"),F("tone") };
+            int    values[7]  = { 0, C020_SUBZONE_EVENT_OPERATION_ONOFF, C020_SUBZONE_EVENT_OPERATION_MONITOR,C020_SUBZONE_EVENT_OPERATION_PULSE,C020_SUBZONE_EVENT_OPERATION_PWM,C020_SUBZONE_EVENT_OPERATION_SERVO,C020_SUBZONE_EVENT_OPERATION_TONE};
+            sprintf(lblbuf,(char *)F("lblop%i"),i);
+            addFormSelector_script(F("Operation"), lblbuf, i<12?7:6,
+                               options, values, NULL, module_subzone[i].op,
+                               F("joinChanged(this)")); 
+
+          }
+          html_add_script(F("document.getElementById('joinmethod').onchange();"), false);
+
+          /*sprintf(lblbuf,(char *)F("lbloot%i"),i);
+          addFormCheckBox(F("on/off/toggle"), lblbuf, false, false);
+          
+          sprintf(lblbuf,(char *)F("lbpulse%i"),i);
+          addFormCheckBox(F("pulse"), lblbuf, false, false);
+          
+          if ( i < 15 ) { // Only available for 0-15
+            sprintf(lblbuf,(char *)F("lbpwm%i"),i);
+            addFormCheckBox(F("pwm"), lblbuf, false, false);
+            
+            sprintf(lblbuf,"lbservo%i",i);
+            addFormCheckBox(F("servo"), lblbuf, false, false);
+          }
+          
+          sprintf(lblbuf,(char *)F("lblmon%i"),i);
+          addFormCheckBox(F("monitor"), lblbuf, false, false);
+
+          if ( i>=12) {
+            sprintf(lblbuf,(char *)F("lbltone%i"),i);
+            addFormCheckBox(F("tone"), lblbuf, false, false);
+          }*/
+
+        }
+
+        addFormSeparator(2);
+/*
+        addFormNumericBox(F("subzone GPIO-1 (D10) TX0"), F(C020_SUBZONE1_LABEL), CPlugin_020_module_subzone[1].subzone, 0, 254);
         //addUnit(F("---"));
         //addFormNote(F("255, for all subzones is not allowed."));
 
-        addFormNumericBox(F("subzone GPIO-1 (D10) TX0"), F(C020_SUBZONE1_LABEL), module_subzone1, 0, 254);
+        addFormNumericBox(F("subzone GPIO-2 (D4) ⚠"), F(C020_SUBZONE2_LABEL), CPlugin_020_module_subzone[2].subzone, 0, 254);
         //addUnit(F("---"));
         //addFormNote(F("255, for all subzones is not allowed."));
 
-        addFormNumericBox(F("subzone GPIO-2 (D4) ⚠"), F(C020_SUBZONE2_LABEL), module_subzone2, 0, 254);
+        addFormNumericBox(F("subzone GPIO-3 (D9) RX0"), F(C020_SUBZONE3_LABEL), CPlugin_020_module_subzone[3].subzone, 0, 254);
         //addUnit(F("---"));
         //addFormNote(F("255, for all subzones is not allowed."));
 
-        addFormNumericBox(F("subzone GPIO-3 (D9) RX0"), F(C020_SUBZONE3_LABEL), module_subzone3, 0, 254);
+        addFormNumericBox(F("subzone GPIO-4 (D2)"), F(C020_SUBZONE4_LABEL), CPlugin_020_module_subzone[4].subzone, 0, 254);
         //addUnit(F("---"));
         //addFormNote(F("255, for all subzones is not allowed."));
 
-        addFormNumericBox(F("subzone GPIO-4 (D2)"), F(C020_SUBZONE4_LABEL), module_subzone4, 0, 254);
+        addFormNumericBox(F("subzone GPIO-5 (D1)"), F(C020_SUBZONE5_LABEL), CPlugin_020_module_subzone[5].subzone, 0, 254);
         //addUnit(F("---"));
         //addFormNote(F("255, for all subzones is not allowed."));
 
-        addFormNumericBox(F("subzone GPIO-5 (D1)"), F(C020_SUBZONE5_LABEL), module_subzone5, 0, 254);
+        addFormNumericBox(F("subzone GPIO-9 (D11) ⚠"), F(C020_SUBZONE9_LABEL), CPlugin_020_module_subzone[6].subzone, 0, 254);
         //addUnit(F("---"));
         //addFormNote(F("255, for all subzones is not allowed."));
 
-        addFormNumericBox(F("subzone GPIO-9 (D11) ⚠"), F(C020_SUBZONE9_LABEL), module_subzone9, 0, 254);
+        addFormNumericBox(F("subzone GPIO-10 (D12) ⚠"), F(C020_SUBZONE10_LABEL), CPlugin_020_module_subzone[7].subzone, 0, 254);
         //addUnit(F("---"));
         //addFormNote(F("255, for all subzones is not allowed."));
 
-        addFormNumericBox(F("subzone GPIO-10 (D12) ⚠"), F(C020_SUBZONE10_LABEL), module_subzone10, 0, 254);
+        addFormNumericBox(F("subzone GPIO-12 (D6)"), F(C020_SUBZONE12_LABEL), CPlugin_020_module_subzone[8].subzone, 0, 254);
         //addUnit(F("---"));
         //addFormNote(F("255, for all subzones is not allowed."));
 
-        addFormNumericBox(F("subzone GPIO-12 (D6)"), F(C020_SUBZONE12_LABEL), module_subzone12, 0, 254);
+        addFormNumericBox(F("subzone GPIO-13 (D7)"), F(C020_SUBZONE13_LABEL), CPlugin_020_module_subzone[9].subzone, 0, 254);
         //addUnit(F("---"));
         //addFormNote(F("255, for all subzones is not allowed."));
 
-        addFormNumericBox(F("subzone GPIO-13 (D7)"), F(C020_SUBZONE13_LABEL), module_subzone13, 0, 254);
+        addFormNumericBox(F("subzone GPIO-14 (D5)"), F(C020_SUBZONE14_LABEL), CPlugin_020_module_subzone[10].subzone, 0, 254);
         //addUnit(F("---"));
         //addFormNote(F("255, for all subzones is not allowed."));
 
-        addFormNumericBox(F("subzone GPIO-14 (D5)"), F(C020_SUBZONE14_LABEL), module_subzone14, 0, 254);
+        addFormNumericBox(F("subzone GPIO-15 (D8)"), F(C020_SUBZONE15_LABEL), CPlugin_020_module_subzone[11].subzone, 0, 254);
         //addUnit(F("---"));
         //addFormNote(F("255, for all subzones is not allowed."));
-
-        addFormNumericBox(F("subzone GPIO-15 (D8)"), F(C020_SUBZONE15_LABEL), module_subzone15, 0, 254);
-        //addUnit(F("---"));
-        //addFormNote(F("255, for all subzones is not allowed."));
+*/        
       }
       break;
     }
@@ -262,21 +353,61 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
 
       if (customConfig) {
         customConfig->reset();
-        //customConfig->bheartbeat = web_server.arg(F("bheartbeat"));
         customConfig->bHeartbeat = isFormItemChecked(F(C020_HEARTBEAT_LABEL));
+      #if FEATURE_ADC_VCC   
+        customConfig->bVCC = isFormItemChecked(F(C020_VCC_LABEL));
+      #endif  
+        customConfig->bRSSI = isFormItemChecked(F(C020_RSSI_LABEL));
         customConfig->module_zone = getFormItemInt(F(C020_ZONE_LABEL), customConfig->module_zone);
-        customConfig->module_subzone0 = getFormItemInt(F(C020_SUBZONE0_LABEL), customConfig->module_subzone0);
-        customConfig->module_subzone1 = getFormItemInt(F(C020_SUBZONE1_LABEL), customConfig->module_subzone1);
-        customConfig->module_subzone2 = getFormItemInt(F(C020_SUBZONE2_LABEL), customConfig->module_subzone2);
-        customConfig->module_subzone3 = getFormItemInt(F(C020_SUBZONE3_LABEL), customConfig->module_subzone3);
-        customConfig->module_subzone4 = getFormItemInt(F(C020_SUBZONE4_LABEL), customConfig->module_subzone4);
-        customConfig->module_subzone5 = getFormItemInt(F(C020_SUBZONE5_LABEL), customConfig->module_subzone5);
-        customConfig->module_subzone9 = getFormItemInt(F(C020_SUBZONE9_LABEL), customConfig->module_subzone9);
-        customConfig->module_subzone10 = getFormItemInt(F(C020_SUBZONE10_LABEL), customConfig->module_subzone10);
-        customConfig->module_subzone12 = getFormItemInt(F(C020_SUBZONE12_LABEL), customConfig->module_subzone12);
-        customConfig->module_subzone13 = getFormItemInt(F(C020_SUBZONE13_LABEL), customConfig->module_subzone13);
-        customConfig->module_subzone14 = getFormItemInt(F(C020_SUBZONE14_LABEL), customConfig->module_subzone14);
-        customConfig->module_subzone15 = getFormItemInt(F(C020_SUBZONE15_LABEL), customConfig->module_subzone15);        
+        customConfig->subzone_onoff = getFormItemInt(F(C020_ZONE_LABEL), customConfig->subzone_onoff);        
+        customConfig->subzone_heartbeat = getFormItemInt(F(C020_ZONE_LABEL), customConfig->subzone_heartbeat);
+        customConfig->subzone_vcc = getFormItemInt(F(C020_ZONE_LABEL), customConfig->subzone_vcc);        
+        
+        for (int i=0;i<C020_SUBZONE_COUNT;i++) {
+          char lblbuf[20];
+          sprintf(lblbuf,"lblsz%i",i);
+          customConfig->module_subzone[i].subzone = /*CPlugin_020_module_subzone[i].subzone =*/ getFormItemInt(lblbuf, customConfig->module_subzone[i].subzone);
+          
+          sprintf(lblbuf,"lblop%i",i);
+          customConfig->module_subzone[i].op = getFormItemInt(lblbuf, customConfig->module_subzone[i].op);
+
+          /*
+          sprintf(lblbuf,(char *)F("lbloot%i"),i);          
+          if (isFormItemChecked(lblbuf)) {
+            CPlugin_020_module_subzone[i].op |= C020_SUBZONE_EVENT_OPERATION_ONOFF;
+          }
+          
+          sprintf(lblbuf,(char *)F("lbpulse%i"),i);
+          if (isFormItemChecked(lblbuf)) {
+            CPlugin_020_module_subzone[i].op |= C020_SUBZONE_EVENT_OPERATION_PULSE;
+          }
+
+          if ( i < 15 ) { // Only available for 0-15
+            sprintf(lblbuf,(char *)F("lbpwm%i"),i);
+            if (isFormItemChecked(lblbuf)) {
+              CPlugin_020_module_subzone[i].op |= C020_SUBZONE_EVENT_OPERATION_PWM;
+            }
+
+            sprintf(lblbuf,"lbservo%i",i);
+            if (isFormItemChecked(lblbuf)) {
+              CPlugin_020_module_subzone[i].op |= C020_SUBZONE_EVENT_OPERATION_SERVO;
+            }
+          }
+
+          sprintf(lblbuf,(char *)F("lblmon%i"),i);
+          if (isFormItemChecked(lblbuf)) {
+            CPlugin_020_module_subzone[i].op |= C020_SUBZONE_EVENT_OPERATION_MONITOR;
+          }
+
+          if ( i>=12) {
+            sprintf(lblbuf,(char *)F("lbltone%i"),i);
+            if (isFormItemChecked(lblbuf)) {
+              CPlugin_020_module_subzone[i].op |= C020_SUBZONE_EVENT_OPERATION_TONE;
+            }
+          }*/
+        }        
+        
+        SaveCustomControllerSettings(event->ControllerIndex, (byte *)customConfig.get(), sizeof(C020_ConfigStruct));
       }
       break;
     }
@@ -320,15 +451,32 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
           // https://espeasy.readthedocs.io/en/latest/Reference/Command.html
 
           for (taskIndex_t x = 0; x < TASKS_MAX; x++) {
+
             // We need the index of the controller we are: 0...CONTROLLER_MAX
             if (Settings.TaskDeviceEnabled[x] && (Settings.TaskDeviceID[ControllerID][x] == vscp_data[1])) // get idx for our controller index
             {
               String action = "";
 
-              Serial.print("x  ");
-              Serial.println(x);
-              Serial.print("Settings.TaskDeviceNumber[x]");
-              Serial.println(Settings.TaskDeviceNumber[x]);
+              byte module_zone;
+              struct C020_SubzoneStruct module_subzone[C020_SUBZONE_COUNT];
+
+              {
+                // Keep this object in a small scope so we can destruct it as soon as possible again.
+                std::shared_ptr<C020_ConfigStruct> customConfig(new C020_ConfigStruct);
+
+                if (!customConfig) {
+                  break;
+                }
+                
+                LoadCustomControllerSettings(event->ControllerIndex, (byte *)customConfig.get(), sizeof(C020_ConfigStruct));
+                customConfig->validate();
+                module_zone = customConfig->module_zone;
+                for ( int i=0; i<C020_SUBZONE_COUNT;i++) {
+                  module_subzone[i].gpio = customConfig->module_subzone[i].gpio;
+                  module_subzone[i].subzone = customConfig->module_subzone[i].subzone;
+                  module_subzone[i].op = customConfig->module_subzone[i].op;
+                }
+              }
 
               switch (Settings.TaskDeviceNumber[x]) {
 
@@ -337,34 +485,46 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
                 {
                   if ( VSCP_CLASS1_CONTROL == vscp_class ) {
                     switch(vscp_type) {
-                      
+
+                      // Check data, correct zone                      
+                      if (( 3 > vscp_data.size() ) ||
+                          (module_zone != (byte)vscp_data[2]) ) {
+                        //String log = F("VSCP : Data count is wrong!");
+                        //addLog(LOG_LEVEL_ERROR, log);    
+                        break;
+                      }
+
                       case VSCP_TYPE_CONTROL_TURNON:
                         Serial.println("VSCP_TYPE_CONTROL_TURNON");
-                        if ( 3 == vscp_data.size() ) {
-                          // GPIO,<gpio>,<state>
-                          action  = F("gpio,");
-                          action += (byte)vscp_data[2];  // GPIO
-                          action += ',';
-                          action += 1;
-                        }
-                        else {
-                          String log = F("VSCP : Data count is wrong!");
-                          addLog(LOG_LEVEL_ERROR, log);
+                        for (int i=0;i<C020_SUBZONE_COUNT;i++) {
+                          if (vscp_data[2] == module_subzone[i].subzone) {
+                            // GPIO,<gpio>,<state>
+                            action  = F("gpio,");
+                            action += module_subzone[i].gpio;  // GPIO
+                            action += F(",1");
+                          }
                         }
                         break;
 
                       case VSCP_TYPE_CONTROL_TURNOFF:
-                        // GPIO,<gpio>,<state>
-                        action  = F("gpio,");
-                        action += x;  // GPIO
-                        action += ',';
-                        action += 0;
+                        for (int i=0;i<C020_SUBZONE_COUNT;i++) {
+                          if (vscp_data[2] == module_subzone[i].subzone) {
+                            // GPIO,<gpio>,<state>
+                            action  = F("gpio,");
+                            action += module_subzone[i].gpio;  // GPIO
+                            action += F(",0");
+                          }
+                        }
                         break;
 
                       case VSCP_TYPE_CONTROL_TOGGLE_STATE:
-                        // GPIOtoggle,<gpio>,<state>
-                        action  = F("gpiotoggle,");
-                        action += x;  // GPIO
+                        for (int i=0;i<C020_SUBZONE_COUNT;i++) {
+                          if (vscp_data[2] == module_subzone[i].subzone) {
+                            // GPIOtoggle,<gpio>,<state>
+                            action  = F("gpiotoggle,");
+                            action += module_subzone[i].gpio;  // GPIO
+                          }
+                        }
                         break;
 
                       // milliseconds/seconds/minutes
@@ -401,9 +561,13 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
                               action  = F("longpulse,");
                               break;  
                           } // timing
-                          action += x;  // GPIO
-                          action += ",1,";
-                          action += duration;
+                          for (int i=0;i<C020_SUBZONE_COUNT;i++) {
+                            if (vscp_data[2] == module_subzone[i].subzone) {
+                              action += module_subzone[i].gpio;  // GPIO
+                              action += ",1,";
+                              action += duration;
+                            }
+                          }                         
                         }
                         break;
 
@@ -440,9 +604,13 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
                               action  = F("longpulse,");
                               break;  
                           } // timing
-                          action += x;  // GPIO
-                          action += ",0,";
-                          action += duration;
+                          for (int i=0;i<C020_SUBZONE_COUNT;i++) {
+                            if (vscp_data[2] == module_subzone[i].subzone) {
+                              action += module_subzone[i].gpio;  // GPIO
+                              action += ",0,";
+                              action += duration;
+                            }
+                          }
                         }
                         break;
 
@@ -535,6 +703,23 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
 
     case CPlugin::Function::CPLUGIN_PROTOCOL_SEND:
     {
+      byte module_zone;
+      byte subzone_onoff;
+
+      {
+        // Keep this object in a small scope so we can destruct it as soon as possible again.
+        std::shared_ptr<C020_ConfigStruct> customConfig(new C020_ConfigStruct);
+
+        if (!customConfig) {
+          break;
+        }
+        
+        LoadCustomControllerSettings(event->ControllerIndex, (byte *)customConfig.get(), sizeof(C020_ConfigStruct));
+        customConfig->validate();
+        module_zone = customConfig->module_zone;
+        subzone_onoff = customConfig->subzone_onoff;
+      }
+
       if (event->idx != 0)
       {
         String pubname;
@@ -561,9 +746,9 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
 
             vscp_class  = VSCP_CLASS1_INFORMATION;
             
-            vscp_event[F("vscpData")][0] = 0; // Index
-            vscp_event[F("vscpData")][1] = 0; // Zone
-            vscp_event[F("vscpData")][2] = 0; // Subzone
+            vscp_event[F("vscpData")][0] = 0;             // Index
+            vscp_event[F("vscpData")][1] = module_zone;   // Zone
+            vscp_event[F("vscpData")][2] = subzone_onoff; // Subzone
 
             if (UserVar[event->BaseVarIndex] == 0) {
               vscp_type  = VSCP_TYPE_INFORMATION_ON;
@@ -578,9 +763,9 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
 
             if (UserVar[event->BaseVarIndex] == 0) {
               
-              vscp_event[F("vscpData")][0] = 0; // Index
-              vscp_event[F("vscpData")][1] = 0; // Zone
-              vscp_event[F("vscpData")][2] = 0; // Subzone              
+              vscp_event[F("vscpData")][0] = 0;             // Index
+              vscp_event[F("vscpData")][1] = module_zone;   // Zone
+              vscp_event[F("vscpData")][2] = subzone_onoff; // Subzone              
               
               vscp_class = VSCP_CLASS1_INFORMATION;
               vscp_type = VSCP_TYPE_INFORMATION_OFF;
@@ -605,9 +790,9 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
               /*
               vscp_class = VSCP_CLASS1_INFORMATION;
               vscp_type = VSCP_TYPE_INFORMATION_BIG_LEVEL_CHANGED;
-              vscp_event[F("vscpData")][0] = 0;   // Index 
-              vscp_event[F("vscpData")][1] = 0;   // Zone 
-              vscp_event[F("vscpData")][2] = 0;   // Subzone
+              vscp_event[F("vscpData")][0] = 0;             // Index 
+              vscp_event[F("vscpData")][1] = module_zone;   // Zone 
+              vscp_event[F("vscpData")][2] = 0;             // Subzone
               CPlugin_020_set_single_val( vscp_event, event, 0, 3);
               */
 
@@ -886,13 +1071,46 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
 
     case CPlugin::Function::CPLUGIN_TEN_PER_SECOND:
     {
-     
+      bool bHeartbeat = true;
+    #if FEATURE_ADC_VCC  
+      bool bVCC = false;
+    #endif  
+      bool bRSSI = false;
+      byte module_zone = 0;
+      byte subzone_heartbeat = 0;
+  #if FEATURE_ADC_VCC     
+      byte subzone_vcc = 0;
+  #endif    
+
+      {
+        // Keep this object in a small scope so we can destruct it as soon as possible again.
+        std::shared_ptr<C020_ConfigStruct> customConfig(new C020_ConfigStruct);
+
+        if (!customConfig) {
+          break;
+        }
+        
+        LoadCustomControllerSettings(event->ControllerIndex, (byte *)customConfig.get(), sizeof(C020_ConfigStruct));
+        customConfig->validate();
+        bHeartbeat = customConfig->bHeartbeat;
+  #if FEATURE_ADC_VCC      
+        bVCC = customConfig->bVCC;
+  #endif      
+        bRSSI = customConfig->bRSSI;
+        module_zone = customConfig->module_zone;
+        subzone_heartbeat = customConfig->subzone_heartbeat;
+  #if FEATURE_ADC_VCC      
+        subzone_vcc = customConfig->subzone_vcc; 
+  #endif       
+      }
+
       // Send heartbeat every minute and one initially
-      if ( (!CPlugin_020_last_heartbeat) || 
-           ((millis() - CPlugin_020_last_heartbeat) > 60000 )) {
+      if ( bHeartbeat &&
+           ((!CPlugin_020_last_heartbeat) || 
+           ((millis() - CPlugin_020_last_heartbeat) > 60000 ))) {
         
         CPlugin_020_last_heartbeat = millis();
-        Serial.println("Heartbeat");
+        Serial.println("Heartbeat"); // TODO remove
 
         uint16_t vscp_class;
         uint16_t vscp_type;
@@ -906,18 +1124,81 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
 
         vscp_class = VSCP_CLASS1_INFORMATION;
         vscp_type = VSCP_TYPE_INFORMATION_NODE_HEARTBEAT;
-        vscp_event[F("vscpData")][0] = 0; // Index
-        vscp_event[F("vscpData")][1] = 0; // Zone
-        vscp_event[F("vscpData")][2] = 0; // Subzone CPlugin_020_guid
+        vscp_event[F("vscpData")][0] = (byte)WiFi.RSSI(); // RSSI
+        vscp_event[F("vscpData")][1] = module_zone;       // Zone
+        vscp_event[F("vscpData")][2] = subzone_heartbeat; // Subzone 
 
-        success = CPlugin_020_send_vscp_event(event, vscp_class, vscp_type, vscp_event );
+        if ( !CPlugin_020_send_vscp_event(event, vscp_class, vscp_type, vscp_event )) {
+          return false;
+        }
       }
 
       // rssi
+      if ( bRSSI && 
+           ((millis() - CPlugin_020_last_rssi) > 60000 )) {
+        
+        CPlugin_020_last_rssi = millis();
+        Serial.println("RSSI"); // TODO remove
 
-      // #if FEATURE_ADC_VCC
-      //   vcc = ESP.getVcc() / 1000.0;
-      // #endif
+        uint16_t vscp_class;
+        uint16_t vscp_type;
+        DynamicJsonDocument vscp_event(512);
+
+        vscp_event[F("vscpHead")]  = VSCP_HEADER16_DUMB;
+        vscp_event[F("vscpObid")]  = 0;
+        vscp_event[F("vscpDateTime")]  = "";  // Let interface set
+        vscp_event[F("vscpTimeStamp")]  = millis()*1000;
+        vscp_event[F("vscpGuid")]  = CPlugin_020_guid;
+
+        vscp_class = VSCP_CLASS1_DATA;
+        vscp_type = VSCP_TYPE_DATA_SIGNAL_QUALITY;
+        vscp_event[F("vscpData")][0] = 2; // Unit is dBm
+        vscp_event[F("vscpData")][1] = VSCP_DATACODING_INTEGER; // Integer,sensorindex=0,unit=0
+        long rssi = WiFi.RSSI();
+        byte *p = (byte *)rssi;
+        vscp_event[F("vscpData")][2] = *(p+3); // MSB first
+        vscp_event[F("vscpData")][3] = *(p+2);
+        vscp_event[F("vscpData")][4] = *(p+1); 
+        vscp_event[F("vscpData")][5] = *(p+0);
+
+        if ( !CPlugin_020_send_vscp_event(event, vscp_class, vscp_type, vscp_event )) {
+          return false;
+        }
+      }
+
+  #if FEATURE_ADC_VCC
+      if ( bVCC && 
+           ((millis() - CPlugin_020_last_vcc) > 60000 )) {
+        
+        float vcc = ESP.getVcc() / 1000.0;
+        byte *p = (byte *)&vcc;
+
+        CPlugin_020_last_vcc = millis();
+
+        uint16_t vscp_class;
+        uint16_t vscp_type;
+        DynamicJsonDocument vscp_event(512);
+
+        vscp_event[F("vscpHead")]  = VSCP_HEADER16_DUMB;
+        vscp_event[F("vscpObid")]  = 0;
+        vscp_event[F("vscpDateTime")]  = "";  // Let interface set
+        vscp_event[F("vscpTimeStamp")]  = millis()*1000;
+        vscp_event[F("vscpGuid")]  = CPlugin_020_guid;
+
+        vscp_class = VSCP_CLASS1_MEASUREMENT;
+        vscp_type = VSCP_TYPE_DATA_SIGNAL_QUALITY;
+        vscp_event[F("vscpData")][0] = VSCP_TYPE_MEASUREMENT_ELECTRICAL_POTENTIAL; // Integer,sensorindex=0,unit=0 (Volts)
+        vscp_event[F("vscpData")][1] = *(p+3); // MSB first
+        vscp_event[F("vscpData")][2] = *(p+2);
+        vscp_event[F("vscpData")][3] = *(p+1); 
+        vscp_event[F("vscpData")][4] = *(p+0);
+
+        if ( !CPlugin_020_send_vscp_event(event, vscp_class, vscp_type, vscp_event )) {
+          return false;
+        }
+      }
+  #endif
+
       break;
     }
 
