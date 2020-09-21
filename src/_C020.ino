@@ -103,6 +103,11 @@ unsigned long CPlugin_020_last_vcc = 0;       // Timestamp last VSCP VCC event
 unsigned long CPlugin_020_last_rssi = 0;      // Timestamp last VSCP RSSI event
 byte CPlugin_020_stream_index = 0;            // Used for string/data streams
 
+#if defined(USES_P003)  
+bool          bEnableP003;
+unsigned long CPlugin_020_last_count = 0;     // Timestamp last VSCP counter event
+#endif
+
 // Forward declarations
 bool CPlugin_020_send_vscp_event(struct EventStruct *event, uint16_t vscp_class, uint16_t vscp_type, DynamicJsonDocument &vscp_event );
 void CPlugin_020_set_single_val( DynamicJsonDocument &vscp_event, struct EventStruct *event, byte nVar, byte offset);
@@ -668,7 +673,12 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
 
                   
                 }
-                
+
+#if defined(USES_P003)  // counter
+                // Reset counter taskindex (optional)
+                // Set counter total, value, taskindex(optional)
+#endif
+
 #if defined(USES_P088) || defined(USES_P115)
                 case 88: // Send heatpump IR (P088) if IDX matches
                 case 115: // Send heatpump IR (P115) if IDX matches
@@ -1006,7 +1016,7 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
 
           case SENSOR_TYPE_LONG:
 
-            // RFID 
+#if defined(USES_P012) // RFID           
             vscp_class = VSCP_CLASS1_INFORMATION;
             vscp_type = VSCP_TYPE_INFORMATION_TOKEN_ACTIVITY;
             
@@ -1017,6 +1027,7 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
        
             CPlugin_020_set_single_val( vscp_event, event, 0, 4);
             return CPlugin_020_send_vscp_event(event, vscp_class, vscp_type, vscp_event );
+#endif
 
           case SENSOR_TYPE_DUAL:
           {
@@ -1108,9 +1119,8 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
       if ( bHeartbeat &&
            ((!CPlugin_020_last_heartbeat) || 
            ((millis() - CPlugin_020_last_heartbeat) > 60000 ))) {
-        
+   
         CPlugin_020_last_heartbeat = millis();
-        Serial.println("Heartbeat"); // TODO remove
 
         uint16_t vscp_class;
         uint16_t vscp_type;
@@ -1138,7 +1148,6 @@ bool CPlugin_020(CPlugin::Function function, struct EventStruct *event, String& 
            ((millis() - CPlugin_020_last_rssi) > 60000 )) {
         
         CPlugin_020_last_rssi = millis();
-        Serial.println("RSSI"); // TODO remove
 
         uint16_t vscp_class;
         uint16_t vscp_type;

@@ -23,13 +23,7 @@ Maintainer: |C020_maintainer|
 Change log
 ----------
 
-.. versionchanged:: 2.0
-  ...
-
-  |added|
-  Major overhaul for 2.0 release.
-
-.. versionadded:: 1.0
+.. versionadded:: 2020/09/20
   ...
 
   |added|
@@ -37,4 +31,144 @@ Change log
 
 Description
 -----------
-VSCP MQTT
+
+VSCP stands for Very Simple Control Protocol and is despite it's name a 
+framework for IoT and m2m originating all the way from the last millennium 
+shift. Design criterion's has been to create a protocol that work on very low
+resource devices and on many different transport mechanism. The protocol uses 
+strong typing and concentrate on values and events instead of devices. A 
+temperature measurement for example has a coding and a unit and this information 
+is more interesting then if it originate from a device of type x or type y.
+
+Learn more about VSCP here https://www.vscp.org
+
+VSCP MQTT as implemented here is one way that VSCP datagrams can be carried over 
+MQTT. It used JSON coded frames. A typical VSCP frame in JSON format looks like 
+this
+
+.. code-block:: json
+{
+    "vscpHead": 2,
+    "vscpobid": 123,
+    "vscpDateTime": "2017-01-13T10:16:02",
+    "vscpTimeStamp":50817,
+    "vscpClass": 10,
+    "vscpType": 8,
+    "vscpgGuid": "00:00:00:00:00:00:00:00:00:00:00:00:00:01:00:02",
+    "vscpData": [1,2,3,4,5,6,7],
+}
+
+Important parts are
+
+  * vscpClass - Tells which type of event this event belongs to. 
+      Typically a measurement, a control or information event etc.
+  * vscpType - The type of event in the class. For example a temperature
+      measurement ort a Turn On command or a rfid reading etc.
+  * vscpGuid - This is the globally unique id for the device that send the
+      event.
+  * vscpData - Max 512 bytes of data for higher level or just 8 bytes for 
+      lower level systems.    
+
+There are many classes/types defined to handle most needs and more is added 
+as needs arise. https://docs.vscp.org/spec/latest/#/./level_i_events
+
+For VSCP MQTT events by default are published one
+
+vscp/guid/miso/class/type
+
+This means it is possible to subscribe to all events form all units (vscp/#) 
+or just all events from a specific device (vscp/guid/miso/#) or one can be more 
+specific and just subscribe to all measurements (vscp/guid/miso/10/#) or just 
+temperature measurements from all devices (vscp/+/miso/10/6)
+
+miso stands for master in slave out and is events comming from a remote device 
+into a MQTT broker.
+
+To direct events to a specific device the remote device should subscribe to
+
+vscp/guid/mosi/*
+
+where mosi is master out slave in. The posting schema is the same here. Postings 
+are done to
+
+/vscp/guid/mosi/class/type
+
+by default. It is of course possible to come up with other schemas for this.
+
+The guid mention above is a 16-byte globally unique id. It is written like this
+
+::
+FF:FF:FF:FF:FF:FF:FF:FE:5C:CF:7F:C4:1E:7B:00:00
+
+The actual guid can be obtained from the VSCP team free of charge or it can also 
+be derived from other already available guid's. There are many to choose from and 
+one is to use the mac address of a device as in the guid above. Here the initial 
+parts
+
+::
+FF:FF:FF:FF:FF:FF:FF:FE
+
+tells that this is a GUID derived from a mac address. 
+
+::
+5C:CF:7F:C4:1E:7B
+
+is the mac address and
+
+::
+00:00 
+
+is two bytes the user can use freely.
+
+Full info is here https://docs.vscp.org/spec/latest/#/./vscp_globally_unique_identifiers
+
+The VSCP controller for EspEasy adopts to the above. It can
+
+  * Send heart beat events. (enable in settings)
+  * Send rssi events. (enable in settings)
+  * Send vcc events. (enable in settings if compiled in)
+  * Send events when i/o change state. 
+  * Send measurements for temperature, damp, pressure and wind speed.
+  * Send rfid token detection.
+  * It can receive events to control i/o. 
+    (high-z/high/low/toggle/pulse/pwm/servo/monitor/tone)
+  * More will be supported as devices is tested.   
+
+A full VSCP node have registers and a module description file and some 
+other things but this is an implementation of a dumb node that lacks all
+of that.
+
+Configuration
+-------------
+
+Configure a MQTT broker of choice. Controller subscribe settings will by default 
+be
+
+::
+vscp/FF:FF:FF:FF:FF:FF:FF:FE:%mac%:00:00/mosi/#
+
+and 
+
+::
+vscp/FF:FF:FF:FF:FF:FF:FF:FE:%mac%:00:00/miso
+
+%mac% is replaced by the MAC address of the module.
+
+Set module zone. This zone is common for both send and receive and an
+incoming event sent to a specific zone/subzone should have zone set to
+the same value as set here. Se samples later
+
+The zone for heartbeat events can be set. 
+
+Sub zones are related to specific i/o's and you can set each of them and
+what operation to enable. The gpios follow the documentation
+https://espeasy.readthedocs.io/en/latest/Reference/Command.html and may 
+not be available on your device.
+
+Examples
+--------
+
+
+
+
+

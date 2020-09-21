@@ -61,23 +61,7 @@ bool CPlugin_002(CPlugin::Function function, struct EventStruct *event, String& 
 
     case CPlugin::Function::CPLUGIN_PROTOCOL_RECV:
     {
-      // CLASS1.CONTROL - VSCP_TYPE_CONTROL_TURNON  - Set gpio(index)
-      // CLASS1.CONTROL - VSCP_TYPE_CONTROL_START  - Set gpio(index)
-      // CLASS1.CONTROL - VSCP_TYPE_CONTROL_OPEN  - Set gpio(index)
-      // CLASS1.CONTROL - VSCP_TYPE_CONTROL_ACTIVATE  - Set gpio(index)
-
-      // CLASS1.CONTROL - VSCP_TYPE_CONTROL_TURNOFF  - Clear gpio(index)
-      // CLASS1.CONTROL - VSCP_TYPE_CONTROL_STOP  - Clear gpio(index)
-      // CLASS1.CONTROL - VSCP_TYPE_CONTROL_CLOSE  - Clear gpio(index)
-      // CLASS1.CONTROL - VSCP_TYPE_CONTROL_DEACTIVATE  - Clear gpio(index)
-
-      // CLASS1.CONTROL - VSCP_TYPE_CONTROL_TOGGLE_STATE - Toggle gpio(index)
       
-      // CLASS1.CONTROL - VSCP_TYPE_CONTROL_DIM_LAMPS  - Dim 
-      // CLASS1.CONTROL - VSCP_TYPE_CONTROL_CHANGE_LEVEL - Dim
-      // CLASS1.CONTROL - VSCP_TYPE_CONTROL_RELATIVE_CHANGE_LEVEL - Dim 
-
-      // CLASS1.CONTROL - VSCP_TYPE_CONTROL_SYNC - Send all measurements
       
       // Get i/o state
 
