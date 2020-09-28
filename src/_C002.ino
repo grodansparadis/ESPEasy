@@ -164,8 +164,7 @@ bool CPlugin_002(CPlugin::Function function, struct EventStruct *event, String& 
 
                 // trigger rulesprocessing
                 if (Settings.UseRules) {
-                  struct EventStruct TempEvent;
-                  TempEvent.TaskIndex = x;
+                  struct EventStruct TempEvent(x);
                   parseCommandString(&TempEvent, action);
                   createRuleEvents(&TempEvent);
                 }
@@ -191,7 +190,7 @@ bool CPlugin_002(CPlugin::Function function, struct EventStruct *event, String& 
 
         switch (event->sensorType)
         {
-          case SENSOR_TYPE_SWITCH:
+          case Sensor_VType::SENSOR_TYPE_SWITCH:
             root[F("command")] = String(F("switchlight"));
 
             if (UserVar[event->BaseVarIndex] == 0) {
@@ -201,7 +200,7 @@ bool CPlugin_002(CPlugin::Function function, struct EventStruct *event, String& 
               root[F("switchcmd")] = String(F("On"));
             }
             break;
-          case SENSOR_TYPE_DIMMER:
+          case Sensor_VType::SENSOR_TYPE_DIMMER:
             root[F("command")] = String(F("switchlight"));
 
             if (UserVar[event->BaseVarIndex] == 0) {
@@ -212,17 +211,17 @@ bool CPlugin_002(CPlugin::Function function, struct EventStruct *event, String& 
             }
             break;
 
-          case SENSOR_TYPE_SINGLE:
-          case SENSOR_TYPE_LONG:
-          case SENSOR_TYPE_DUAL:
-          case SENSOR_TYPE_TRIPLE:
-          case SENSOR_TYPE_QUAD:
-          case SENSOR_TYPE_TEMP_HUM:
-          case SENSOR_TYPE_TEMP_BARO:
-          case SENSOR_TYPE_TEMP_EMPTY_BARO:
-          case SENSOR_TYPE_TEMP_HUM_BARO:
-          case SENSOR_TYPE_WIND:
-          case SENSOR_TYPE_STRING:
+          case Sensor_VType::SENSOR_TYPE_SINGLE:
+          case Sensor_VType::SENSOR_TYPE_LONG:
+          case Sensor_VType::SENSOR_TYPE_DUAL:
+          case Sensor_VType::SENSOR_TYPE_TRIPLE:
+          case Sensor_VType::SENSOR_TYPE_QUAD:
+          case Sensor_VType::SENSOR_TYPE_TEMP_HUM:
+          case Sensor_VType::SENSOR_TYPE_TEMP_BARO:
+          case Sensor_VType::SENSOR_TYPE_TEMP_EMPTY_BARO:
+          case Sensor_VType::SENSOR_TYPE_TEMP_HUM_BARO:
+          case Sensor_VType::SENSOR_TYPE_WIND:
+          case Sensor_VType::SENSOR_TYPE_STRING:
           default:
             root[F("nvalue")] = 0;
             root[F("svalue")] = formatDomoticzSensorType(event);
